@@ -6,10 +6,12 @@ import io
 import xlsxwriter
 
 app = Flask(__name__)
-app.secret_key = 'tu_clave_secreta'
+app.secret_key = 'tu_clave_secreta'  # Cambia esta clave por una más segura en producción
 
-# Crear base de datos si no existe
+# ---------- BASE DE DATOS ----------
+
 def init_db():
+    """Crea la tabla citas si no existe."""
     conn = sqlite3.connect('citas.db')
     c = conn.cursor()
     c.execute('''
@@ -26,7 +28,8 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Horarios disponibles por día
+# ---------- HORARIOS Y DISPONIBILIDAD ----------
+
 horarios = {
     'domingo':   ('09:00', '16:00'),
     'lunes':     ('09:00', '18:30'),
@@ -37,31 +40,36 @@ horarios = {
     'sábado':    ('09:00', '14:00')
 }
 
-# Generar horas disponibles para un día y fecha
 def generar_horas_disponibles(dia_semana, fecha):
+    """
+    Devuelve lista de horas disponibles para una fecha dada, excluyendo las ya agendadas.
+    Cada intervalo es de 30 minutos.
+    """
     if dia_semana not in horarios:
         return []
 
-    inicio, fin = horarios[dia_semana]
-    inicio_dt = datetime.strptime(inicio, '%H:%M')
-    fin_dt = datetime.strptime(fin, '%H:%M')
+    inicio_str, fin_str = horarios[dia_semana]
+    inicio_dt = datetime.strptime(inicio_str, '%H:%M')
+    fin_dt = datetime.strptime(fin_str, '%H:%M')
 
-    # Obtener horas ya agendadas para esa fecha
+    # Obtener horas ya ocupadas para la fecha
     conn = sqlite3.connect('citas.db')
     c = conn.cursor()
     c.execute("SELECT hora FROM citas WHERE fecha = ?", (fecha,))
-    ocupadas = [datetime.strptime(h[0], "%H:%M").strftime("%H:%M") for h in c.fetchall()]
+    horas_ocupadas = {row[0] for row in c.fetchall()}
     conn.close()
 
     horas_disponibles = []
     actual = inicio_dt
     while actual <= fin_dt:
         hora_str = actual.strftime('%H:%M')
-        if hora_str not in ocupadas:
+        if hora_str not in horas_ocupadas:
             horas_disponibles.append(hora_str)
         actual += timedelta(minutes=30)
 
     return horas_disponibles
+
+# ---------- RUTAS ----------
 
 @app.route('/')
 def index():
@@ -70,10 +78,11 @@ def index():
 @app.route('/agendar', methods=['GET', 'POST'])
 def agendar():
     if request.method == 'POST':
-        campos = ['nombre', 'email', 'telefono', 'servicio', 'fecha', 'hora']
-        for campo in campos:
-            if campo not in request.form or request.form[campo].strip() == '':
-                flash(f'El campo "{campo}" es obligatorio.')
+        campos_requeridos = ['nombre', 'email', 'telefono', 'servicio', 'fecha', 'hora']
+        for campo in campos_requeridos:
+            valor = request.form.get(campo, '').strip()
+            if not valor:
+                flash(f'El campo "{campo}" es obligatorio.', 'error')
                 return redirect(url_for('agendar'))
 
         nombre = request.form['nombre']
@@ -83,14 +92,34 @@ def agendar():
         fecha = request.form['fecha']
         hora = request.form['hora']
 
+        # Validar que la hora sigue estando disponible (evita doble reserva)
+        dia_semana_eng = datetime.strptime(fecha, '%Y-%m-%d').strftime('%A').lower()
+        dias_map = {
+            'monday': 'lunes',
+            'tuesday': 'martes',
+            'wednesday': 'miércoles',
+            'thursday': 'jueves',
+            'friday': 'viernes',
+            'saturday': 'sábado',
+            'sunday': 'domingo'
+        }
+        dia_semana = dias_map.get(dia_semana_eng, '')
+        disponibles = generar_horas_disponibles(dia_semana, fecha)
+        if hora not in disponibles:
+            flash('La hora seleccionada ya no está disponible. Por favor, elige otra.', 'error')
+            return redirect(url_for('agendar'))
+
+        # Insertar cita
         conn = sqlite3.connect('citas.db')
         c = conn.cursor()
-        c.execute("INSERT INTO citas (nombre, email, telefono, servicio, fecha, hora) VALUES (?, ?, ?, ?, ?, ?)",
-                  (nombre, email, telefono, servicio, fecha, hora))
+        c.execute("""
+            INSERT INTO citas (nombre, email, telefono, servicio, fecha, hora) 
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (nombre, email, telefono, servicio, fecha, hora))
         conn.commit()
         conn.close()
 
-        flash('Cita agendada con éxito.')
+        flash('Cita agendada con éxito.', 'success')
         return redirect(url_for('index'))
 
     return render_template('agendar.html')
@@ -119,24 +148,26 @@ def horas_disponibles():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        usuario = request.form['usuario']
-        clave = request.form['clave']
+        usuario = request.form.get('usuario', '')
+        clave = request.form.get('clave', '')
         if usuario == 'admin' and clave == '1234':
             session['admin'] = True
+            flash('Has iniciado sesión como administrador.', 'success')
             return redirect(url_for('admin'))
         else:
-            flash('Credenciales incorrectas.')
+            flash('Credenciales incorrectas.', 'error')
     return render_template('login.html')
 
 @app.route('/logout')
 def logout():
     session.pop('admin', None)
-    flash('Sesión cerrada.')
+    flash('Sesión cerrada.', 'success')
     return redirect(url_for('index'))
 
 @app.route('/admin')
 def admin():
     if not session.get('admin'):
+        flash('Acceso denegado. Por favor inicia sesión.', 'error')
         return redirect(url_for('login'))
 
     conn = sqlite3.connect('citas.db')
@@ -150,6 +181,7 @@ def admin():
 @app.route('/eliminar_cita/<int:id>', methods=['POST'])
 def eliminar_cita(id):
     if not session.get('admin'):
+        flash('Acceso denegado. Por favor inicia sesión.', 'error')
         return redirect(url_for('login'))
 
     conn = sqlite3.connect('citas.db')
@@ -157,12 +189,13 @@ def eliminar_cita(id):
     c.execute("DELETE FROM citas WHERE id = ?", (id,))
     conn.commit()
     conn.close()
-    flash('Cita eliminada.')
+    flash('Cita eliminada correctamente.', 'success')
     return redirect(url_for('admin'))
 
 @app.route('/exportar_citas')
 def exportar_citas():
     if not session.get('admin'):
+        flash('Acceso denegado. Por favor inicia sesión.', 'error')
         return redirect(url_for('login'))
 
     conn = sqlite3.connect('citas.db')
@@ -186,9 +219,14 @@ def exportar_citas():
     workbook.close()
     output.seek(0)
 
-    return send_file(output, as_attachment=True, download_name="citas.xlsx", mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    return send_file(output,
+                     as_attachment=True,
+                     download_name="citas.xlsx",
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+# ---------- EJECUCIÓN ----------
 
 if __name__ == '__main__':
     if not os.path.exists('citas.db'):
         init_db()
-    app.run(debug=True, host='0.0.0.0', port=10000)  # Render suele usar puerto asignado, pero para pruebas locales
+    app.run(debug=True, host='0.0.0.0', port=10000)
