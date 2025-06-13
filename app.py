@@ -10,7 +10,7 @@ app.secret_key = 'tu_clave_secreta'
 
 # Crear base de datos si no existe
 def init_db():
-    conn = sqlite3.connect('citas.db')
+    conn = sqlite3.connect('citasbarber.db')
     c = conn.cursor()
     c.execute('''
         CREATE TABLE IF NOT EXISTS citas (
@@ -26,9 +26,6 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Ejecutar init_db al iniciar
-init_db()
-
 # Horarios disponibles por día
 horarios = {
     'domingo':   ('09:00', '16:00'),
@@ -40,6 +37,7 @@ horarios = {
     'sábado':    ('09:00', '14:00')
 }
 
+# Generar horas disponibles para un día y fecha
 def generar_horas_disponibles(dia_semana, fecha):
     if dia_semana not in horarios:
         return []
@@ -48,7 +46,8 @@ def generar_horas_disponibles(dia_semana, fecha):
     inicio_dt = datetime.strptime(inicio, '%H:%M')
     fin_dt = datetime.strptime(fin, '%H:%M')
 
-    conn = sqlite3.connect('citas.db')
+    # Obtener horas ya agendadas para esa fecha
+    conn = sqlite3.connect('citasbarber.db')
     c = conn.cursor()
     c.execute("SELECT hora FROM citas WHERE fecha = ?", (fecha,))
     ocupadas = [datetime.strptime(h[0], "%H:%M").strftime("%H:%M") for h in c.fetchall()]
@@ -84,7 +83,7 @@ def agendar():
         fecha = request.form['fecha']
         hora = request.form['hora']
 
-        conn = sqlite3.connect('citas.db')
+        conn = sqlite3.connect('citasbarber.db')
         c = conn.cursor()
         c.execute("INSERT INTO citas (nombre, email, telefono, servicio, fecha, hora) VALUES (?, ?, ?, ?, ?, ?)",
                   (nombre, email, telefono, servicio, fecha, hora))
@@ -140,7 +139,7 @@ def admin():
     if not session.get('admin'):
         return redirect(url_for('login'))
 
-    conn = sqlite3.connect('citas.db')
+    conn = sqlite3.connect('citasbarber.db')
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     c.execute("SELECT * FROM citas ORDER BY fecha, hora")
@@ -153,7 +152,7 @@ def eliminar_cita(id):
     if not session.get('admin'):
         return redirect(url_for('login'))
 
-    conn = sqlite3.connect('citas.db')
+    conn = sqlite3.connect('citasbarber.db')
     c = conn.cursor()
     c.execute("DELETE FROM citas WHERE id = ?", (id,))
     conn.commit()
@@ -166,7 +165,7 @@ def exportar_citas():
     if not session.get('admin'):
         return redirect(url_for('login'))
 
-    conn = sqlite3.connect('citas.db')
+    conn = sqlite3.connect('citasbarber.db')
     c = conn.cursor()
     c.execute("SELECT nombre, email, telefono, servicio, fecha, hora FROM citas ORDER BY fecha, hora")
     datos = c.fetchall()
@@ -189,6 +188,6 @@ def exportar_citas():
 
     return send_file(output, as_attachment=True, download_name="citasbarber.xlsx", mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
-# Para Render, no uses debug y asegúrate de usar el puerto que asigna
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+    init_db()  # Se asegura que la base y tabla existan
+    app.run(debug=False, host='0.0.0.0', port=10000)
