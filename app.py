@@ -10,7 +10,7 @@ app.secret_key = 'tu_clave_secreta'
 
 # Crear base de datos si no existe
 def init_db():
-    conn = sqlite3.connect('citasbarber.db')
+    conn = sqlite3.connect('citas.db')
     c = conn.cursor()
     c.execute('''
         CREATE TABLE IF NOT EXISTS citas (
@@ -47,7 +47,7 @@ def generar_horas_disponibles(dia_semana, fecha):
     fin_dt = datetime.strptime(fin, '%H:%M')
 
     # Obtener horas ya agendadas para esa fecha
-    conn = sqlite3.connect('citasbarber.db')
+    conn = sqlite3.connect('citas.db')
     c = conn.cursor()
     c.execute("SELECT hora FROM citas WHERE fecha = ?", (fecha,))
     ocupadas = [datetime.strptime(h[0], "%H:%M").strftime("%H:%M") for h in c.fetchall()]
@@ -83,7 +83,7 @@ def agendar():
         fecha = request.form['fecha']
         hora = request.form['hora']
 
-        conn = sqlite3.connect('citasbarber.db')
+        conn = sqlite3.connect('citas.db')
         c = conn.cursor()
         c.execute("INSERT INTO citas (nombre, email, telefono, servicio, fecha, hora) VALUES (?, ?, ?, ?, ?, ?)",
                   (nombre, email, telefono, servicio, fecha, hora))
@@ -139,7 +139,7 @@ def admin():
     if not session.get('admin'):
         return redirect(url_for('login'))
 
-    conn = sqlite3.connect('citasbarber.db')
+    conn = sqlite3.connect('citas.db')
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     c.execute("SELECT * FROM citas ORDER BY fecha, hora")
@@ -152,7 +152,7 @@ def eliminar_cita(id):
     if not session.get('admin'):
         return redirect(url_for('login'))
 
-    conn = sqlite3.connect('citasbarber.db')
+    conn = sqlite3.connect('citas.db')
     c = conn.cursor()
     c.execute("DELETE FROM citas WHERE id = ?", (id,))
     conn.commit()
@@ -165,7 +165,7 @@ def exportar_citas():
     if not session.get('admin'):
         return redirect(url_for('login'))
 
-    conn = sqlite3.connect('citasbarber.db')
+    conn = sqlite3.connect('citas.db')
     c = conn.cursor()
     c.execute("SELECT nombre, email, telefono, servicio, fecha, hora FROM citas ORDER BY fecha, hora")
     datos = c.fetchall()
@@ -173,7 +173,7 @@ def exportar_citas():
 
     output = io.BytesIO()
     workbook = xlsxwriter.Workbook(output, {'in_memory': True})
-    worksheet = workbook.add_worksheet("Citasbarber")
+    worksheet = workbook.add_worksheet("Citas")
 
     headers = ['Nombre', 'Email', 'Teléfono', 'Servicio', 'Fecha', 'Hora']
     for col, header in enumerate(headers):
@@ -186,8 +186,9 @@ def exportar_citas():
     workbook.close()
     output.seek(0)
 
-    return send_file(output, as_attachment=True, download_name="citasbarber.xlsx", mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    return send_file(output, as_attachment=True, download_name="citas.xlsx", mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 if __name__ == '__main__':
-    init_db()  # Se asegura que la base y tabla existan
-    app.run(debug=False, host='0.0.0.0', port=10000)
+    if not os.path.exists('citas.db'):
+        init_db()
+    app.run(debug=True, host='0.0.0.0', port=10000)  # Render suele usar puerto asignado, pero para pruebas locales
