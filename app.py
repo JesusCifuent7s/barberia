@@ -173,7 +173,7 @@ def exportar_citas():
 
     output = io.BytesIO()
     workbook = xlsxwriter.Workbook(output, {'in_memory': True})
-    worksheet = workbook.add_worksheet("Citas")
+    worksheet = workbook.add_worksheet("Citasbarber")
 
     headers = ['Nombre', 'Email', 'Teléfono', 'Servicio', 'Fecha', 'Hora']
     for col, header in enumerate(headers):
@@ -186,9 +186,9 @@ def exportar_citas():
     workbook.close()
     output.seek(0)
 
-    return send_file(output, as_attachment=True, download_name="citas.xlsx", mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    return send_file(output, as_attachment=True, download_name="citasbarber.xlsx", mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 if __name__ == '__main__':
-    if not os.path.exists('citas.db'):
+    if not os.path.exists('citasbarber.db'):
         init_db()
     app.run(debug=True, host='0.0.0.0', port=10000)  # Render suele usar puerto asignado, pero para pruebas locales
