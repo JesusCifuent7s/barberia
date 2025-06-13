@@ -26,7 +26,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Horarios disponibles
+# Horarios disponibles por día
 horarios = {
     'domingo':   ('09:00', '16:00'),
     'lunes':     ('09:00', '18:30'),
@@ -37,18 +37,20 @@ horarios = {
     'sábado':    ('09:00', '14:00')
 }
 
-# Genera horas libres
+# Generar horas disponibles para un día y fecha
 def generar_horas_disponibles(dia_semana, fecha):
     if dia_semana not in horarios:
         return []
+
     inicio, fin = horarios[dia_semana]
     inicio_dt = datetime.strptime(inicio, '%H:%M')
     fin_dt = datetime.strptime(fin, '%H:%M')
 
+    # Obtener horas ya agendadas para esa fecha
     conn = sqlite3.connect('citas.db')
     c = conn.cursor()
     c.execute("SELECT hora FROM citas WHERE fecha = ?", (fecha,))
-    ocupadas = [row[0] for row in c.fetchall()]
+    ocupadas = [datetime.strptime(h[0], "%H:%M").strftime("%H:%M") for h in c.fetchall()]
     conn.close()
 
     horas_disponibles = []
@@ -61,19 +63,17 @@ def generar_horas_disponibles(dia_semana, fecha):
 
     return horas_disponibles
 
-# Página de inicio
 @app.route('/')
 def index():
     return render_template('index.html')
 
-# Agendar cita
 @app.route('/agendar', methods=['GET', 'POST'])
 def agendar():
     if request.method == 'POST':
-        required_fields = ['nombre', 'email', 'telefono', 'servicio', 'fecha', 'hora']
-        for field in required_fields:
-            if field not in request.form or request.form[field].strip() == '':
-                flash(f'El campo "{field}" es obligatorio.')
+        campos = ['nombre', 'email', 'telefono', 'servicio', 'fecha', 'hora']
+        for campo in campos:
+            if campo not in request.form or request.form[campo].strip() == '':
+                flash(f'El campo "{campo}" es obligatorio.')
                 return redirect(url_for('agendar'))
 
         nombre = request.form['nombre']
@@ -95,16 +95,14 @@ def agendar():
 
     return render_template('agendar.html')
 
-# Obtener horas disponibles por fecha
 @app.route('/horas_disponibles', methods=['POST'])
 def horas_disponibles():
     data = request.get_json()
     fecha = data.get('fecha')
-
     if not fecha:
         return jsonify([])
 
-    dia_semana_ing = datetime.strptime(fecha, '%Y-%m-%d').strftime('%A').lower()
+    dia_semana_eng = datetime.strptime(fecha, '%Y-%m-%d').strftime('%A').lower()
     dias_map = {
         'monday': 'lunes',
         'tuesday': 'martes',
@@ -114,11 +112,10 @@ def horas_disponibles():
         'saturday': 'sábado',
         'sunday': 'domingo'
     }
-    dia_semana = dias_map.get(dia_semana_ing, '')
+    dia_semana = dias_map.get(dia_semana_eng, '')
     disponibles = generar_horas_disponibles(dia_semana, fecha)
     return jsonify(disponibles)
 
-# Inicio de sesión admin
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -131,14 +128,12 @@ def login():
             flash('Credenciales incorrectas.')
     return render_template('login.html')
 
-# Cerrar sesión
 @app.route('/logout')
 def logout():
     session.pop('admin', None)
     flash('Sesión cerrada.')
     return redirect(url_for('index'))
 
-# Panel de administración
 @app.route('/admin')
 def admin():
     if not session.get('admin'):
@@ -152,7 +147,6 @@ def admin():
     conn.close()
     return render_template('admin.html', citas=citas)
 
-# Eliminar cita
 @app.route('/eliminar_cita/<int:id>', methods=['POST'])
 def eliminar_cita(id):
     if not session.get('admin'):
@@ -166,7 +160,6 @@ def eliminar_cita(id):
     flash('Cita eliminada.')
     return redirect(url_for('admin'))
 
-# Exportar citas a Excel
 @app.route('/exportar_citas')
 def exportar_citas():
     if not session.get('admin'):
@@ -183,8 +176,8 @@ def exportar_citas():
     worksheet = workbook.add_worksheet("Citas")
 
     headers = ['Nombre', 'Email', 'Teléfono', 'Servicio', 'Fecha', 'Hora']
-    for col_num, header in enumerate(headers):
-        worksheet.write(0, col_num, header)
+    for col, header in enumerate(headers):
+        worksheet.write(0, col, header)
 
     for row_num, fila in enumerate(datos, start=1):
         for col_num, valor in enumerate(fila):
@@ -195,8 +188,7 @@ def exportar_citas():
 
     return send_file(output, as_attachment=True, download_name="citas.xlsx", mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
-# Inicializar base de datos
 if __name__ == '__main__':
     if not os.path.exists('citas.db'):
         init_db()
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=10000)  # Render suele usar puerto asignado, pero para pruebas locales
