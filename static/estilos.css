@@ -1,0 +1,15 @@
+input.form-control, select.form-select {
+    background: #2a2a2a; /* fondo oscuro */
+    border: 1px solid #444;
+    color: #eee; /* texto claro para que se vea */
+    transition: border-color 0.3s ease;
+}
+input.form-control::placeholder {
+    color: #bbb; /* placeholder gris claro */
+}
+input.form-control:focus, select.form-select:focus {
+    border-color: #f39c12;
+    box-shadow: 0 0 8px #f39c12;
+    color: #fff; /* texto blanco al escribir */
+    background: #333; /* para que se mantenga oscuro */
+}
