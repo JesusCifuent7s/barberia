@@ -26,6 +26,9 @@ def init_db():
     conn.commit()
     conn.close()
 
+# Ejecutar init_db al iniciar
+init_db()
+
 # Horarios disponibles por día
 horarios = {
     'domingo':   ('09:00', '16:00'),
@@ -37,7 +40,6 @@ horarios = {
     'sábado':    ('09:00', '14:00')
 }
 
-# Generar horas disponibles para un día y fecha
 def generar_horas_disponibles(dia_semana, fecha):
     if dia_semana not in horarios:
         return []
@@ -46,7 +48,6 @@ def generar_horas_disponibles(dia_semana, fecha):
     inicio_dt = datetime.strptime(inicio, '%H:%M')
     fin_dt = datetime.strptime(fin, '%H:%M')
 
-    # Obtener horas ya agendadas para esa fecha
     conn = sqlite3.connect('citas.db')
     c = conn.cursor()
     c.execute("SELECT hora FROM citas WHERE fecha = ?", (fecha,))
@@ -188,7 +189,6 @@ def exportar_citas():
 
     return send_file(output, as_attachment=True, download_name="citasbarber.xlsx", mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
+# Para Render, no uses debug y asegúrate de usar el puerto que asigna
 if __name__ == '__main__':
-    if not os.path.exists('citasbarber.db'):
-        init_db()
-    app.run(debug=True, host='0.0.0.0', port=10000)  # Render suele usar puerto asignado, pero para pruebas locales
+    app.run(host='0.0.0.0', port=10000)
